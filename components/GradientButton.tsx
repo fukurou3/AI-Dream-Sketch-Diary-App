@@ -9,16 +9,28 @@ interface Props {
   title: string;
   onPress: () => void;
   style?: ViewStyle;
+  disabled?: boolean;
 }
 
-export function GradientButton({ title, onPress, style }: Props) {
+export function GradientButton({ title, onPress, style, disabled = false }: Props) {
   const colorScheme = useColorScheme() ?? 'light';
   const start = Colors[colorScheme].buttonStart;
   const end = Colors[colorScheme].buttonEnd;
 
+  const handlePress = () => {
+    if (!disabled) {
+      onPress();
+    }
+  };
+
+  const buttonStyle = {
+    ...styles.button,
+    opacity: disabled ? 0.5 : 1,
+  };
+
   return (
-    <Pressable onPress={onPress} style={style} accessibilityRole="button">
-      <LinearGradient colors={[start, end]} style={styles.button}>
+    <Pressable onPress={handlePress} style={style} accessibilityRole="button" disabled={disabled}>
+      <LinearGradient colors={[start, end]} style={buttonStyle}>
         <Text style={styles.text}>{title}</Text>
       </LinearGradient>
     </Pressable>
