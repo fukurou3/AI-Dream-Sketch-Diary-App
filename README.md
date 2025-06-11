@@ -1,6 +1,14 @@
-# Welcome to your Expo app 👋
+# AI×夢スケッチ日記帳
 
-This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
+このアプリは夢を記録し、AIが画像を生成してくれる日記アプリのサンプルです。iOSらしいシンプルなUIと多言語対応を備えています。
+
+## 主な機能
+
+- 夢のテキスト記録
+- 多言語切り替え（日本語／英語）
+- テーマカラーはミスティックパープルとパステルグリーンを基調
+- 日記一覧画面と追加画面
+- 言語とテーマを変更できる設定画面
 
 ## Get started
 
