@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState } from 'react';
+import React, { createContext, useContext, useState, useMemo } from 'react';
 import { useColorScheme as useSystemColorScheme } from 'react-native';
 
 export type ThemePreference = 'light' | 'dark' | 'system';
@@ -12,8 +12,14 @@ const ThemeContext = createContext<ThemeContextValue | undefined>(undefined);
 
 export function ThemePreferenceProvider({ children }: { children: React.ReactNode }) {
   const [preference, setPreference] = useState<ThemePreference>('system');
+  
+  const value = useMemo(() => ({
+    preference,
+    setPreference,
+  }), [preference]);
+  
   return (
-    <ThemeContext.Provider value={{ preference, setPreference }}>
+    <ThemeContext.Provider value={value}>
       {children}
     </ThemeContext.Provider>
   );

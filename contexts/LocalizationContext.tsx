@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, ReactNode } from 'react';
+import React, { createContext, useContext, useState, ReactNode, useCallback, useMemo } from 'react';
 import { translations, SupportedLanguage, TranslationKey } from '@/constants/translations';
 
 interface LocalizationContextValue {
@@ -14,10 +14,16 @@ export function LocalizationProvider({ children }: { children: ReactNode }) {
   const initial = deviceLocale.startsWith('ja') ? 'ja' : 'en';
   const [language, setLanguage] = useState<SupportedLanguage>(initial);
 
-  const t = (key: TranslationKey) => translations[language][key] || key;
+  const t = useCallback((key: TranslationKey) => translations[language][key] || key, [language]);
+
+  const value = useMemo(() => ({
+    language,
+    setLanguage,
+    t,
+  }), [language, t]);
 
   return (
-    <LocalizationContext.Provider value={{ language, setLanguage, t }}>
+    <LocalizationContext.Provider value={value}>
       {children}
     </LocalizationContext.Provider>
   );
