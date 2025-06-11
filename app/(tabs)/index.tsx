@@ -2,99 +2,17 @@ import React, { useState, useCallback } from 'react';
 import { FlatList, StyleSheet, View, RefreshControl, Pressable, Alert } from 'react-native';
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedView } from '@/components/ThemedView';
-import { GradientButton } from '@/components/GradientButton';
+import { DreamItem } from '@/components/DreamItem';
 import { useLocalization } from '@/contexts/LocalizationContext';
-import { useColorScheme } from '@/hooks/useColorScheme';
-import { Colors } from '@/constants/Colors';
-import { DreamStorage } from '@/services/DreamStorage';
-import { Dream } from '@/types/Dream';
-import { AIImageGenerator } from '@/services/AIImageGenerator';
+import { useDreams } from '@/hooks/useDreams';
+import { useImageGeneration } from '@/hooks/useImageGeneration';
+import { useErrorHandler } from '@/hooks/useErrorHandler';
 import { SharingService } from '@/services/SharingService';
+import { THEME_CONSTANTS } from '@/constants/Theme';
+import { Dream } from '@/types/Dream';
 import { useFocusEffect } from '@react-navigation/native';
 
 type ViewMode = 'list' | 'calendar';
-
-function DreamItem({ 
-  dream, 
-  onGenerateImage,
-  isGenerating,
-  onShare
-}: { 
-  dream: Dream; 
-  onGenerateImage: (dream: Dream) => void;
-  isGenerating: boolean;
-  onShare: (dream: Dream) => void;
-}) {
-  const { t } = useLocalization();
-  const colorScheme = useColorScheme() ?? 'light';
-  
-  const formatDate = (date: Date) => {
-    return date.toLocaleDateString('en-US', {
-      month: 'short',
-      day: 'numeric',
-      year: 'numeric',
-    });
-  };
-
-  const itemStyle = {
-    ...styles.dreamItem,
-    backgroundColor: colorScheme === 'dark' ? '#2C2F49' : '#FFFFFF',
-    borderColor: colorScheme === 'dark' ? '#404566' : '#E0E0E0',
-  };
-
-  return (
-    <ThemedView style={itemStyle}>
-      <View style={styles.dreamHeader}>
-        <ThemedText type="subtitle" style={styles.dreamTitle}>
-          {dream.title}
-        </ThemedText>
-        <ThemedText style={styles.dreamDate}>
-          {formatDate(dream.createdAt)}
-        </ThemedText>
-      </View>
-      
-      <ThemedText numberOfLines={3} style={styles.dreamContent}>
-        {dream.content}
-      </ThemedText>
-      
-      {dream.tags.length > 0 && (
-        <View style={styles.tagsContainer}>
-          {dream.tags.map((tag, index) => (
-            <View key={index} style={[styles.tag, { backgroundColor: Colors[colorScheme].buttonStart }]}>
-              <ThemedText style={styles.tagText}>#{tag}</ThemedText>
-            </View>
-          ))}
-        </View>
-      )}
-      
-      {dream.generatedImages.length > 0 && (
-        <View style={styles.imagesContainer}>
-          {dream.generatedImages.slice(0, 3).map((image, index) => (
-            <View key={index} style={styles.imagePreview}>
-              <ThemedText style={styles.imageUrl} numberOfLines={1}>
-                🖼️ {image.style} image
-              </ThemedText>
-            </View>
-          ))}
-        </View>
-      )}
-      
-      <View style={styles.buttonContainer}>
-        <GradientButton
-          title={isGenerating ? t('generating') : t('generateImage')}
-          onPress={() => onGenerateImage(dream)}
-          disabled={isGenerating}
-          style={styles.generateButton}
-        />
-        <GradientButton
-          title={t('share')}
-          onPress={() => onShare(dream)}
-          style={styles.shareButton}
-        />
-      </View>
-    </ThemedView>
-  );
-}
 
 function EmptyState() {
   const { t } = useLocalization();
@@ -113,36 +31,29 @@ function EmptyState() {
 
 export default function DiaryScreen() {
   const { t } = useLocalization();
-  const [dreams, setDreams] = useState<Dream[]>([]);
   const [viewMode, setViewMode] = useState<ViewMode>('list');
-  const [isLoading, setIsLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
-  const [generatingDreamId, setGeneratingDreamId] = useState<string | null>(null);
-
-  const loadDreams = async () => {
-    try {
-      const loadedDreams = await DreamStorage.getAllDreams();
-      setDreams(loadedDreams);
-    } catch (error) {
-      console.error('Error loading dreams:', error);
-    } finally {
-      setIsLoading(false);
-      setRefreshing(false);
-    }
-  };
+  const { handleSharingError } = useErrorHandler();
+  
+  const { 
+    dreams, 
+    isLoading, 
+    isRefreshing, 
+    loadDreams, 
+    refreshDreams 
+  } = useDreams();
+  
+  const { 
+    generatingDreamId, 
+    generateImage 
+  } = useImageGeneration();
 
   useFocusEffect(
     useCallback(() => {
       loadDreams();
-    }, [])
+    }, [loadDreams])
   );
 
-  const onRefresh = () => {
-    setRefreshing(true);
-    loadDreams();
-  };
-
-  const onShare = async (dream: Dream) => {
+  const onShare = useCallback(async (dream: Dream) => {
     try {
       if (dream.generatedImages.length > 0) {
         // Share the first generated image
@@ -162,52 +73,17 @@ export default function DiaryScreen() {
         }
       }
     } catch (error) {
-      console.error('Error sharing dream:', error);
-      Alert.alert('Error', t('sharingFailed'));
+      handleSharingError(error);
     }
-  };
+  }, [t, handleSharingError]);
 
-  const onGenerateImage = async (dream: Dream) => {
-    setGeneratingDreamId(dream.id);
-    
-    try {
-      // Check if user has credits (for free tier, this would check ad credits)
-      const hasCredits = await AIImageGenerator.checkGenerationCredits();
-      
-      if (hasCredits === 0) {
-        // For free tier, show ad first
-        const watchedAd = await AIImageGenerator.watchAdForCredit();
-        if (!watchedAd) {
-          Alert.alert('Error', 'Please watch the ad to generate an image.');
-          return;
-        }
-      }
-
-      // Generate the image
-      const imageResult = await AIImageGenerator.generateImage(dream, {
-        style: 'realistic',
-        quality: 'standard',
-        version: 'free'
-      });
-
-      // Save the image to the dream
-      await DreamStorage.addImageToDream(dream.id, imageResult);
-      
-      // Consume the credit
-      await AIImageGenerator.consumeCredit();
-      
-      Alert.alert('Success', t('imageGenerated'));
-      
+  const onGenerateImage = useCallback(async (dream: Dream) => {
+    const success = await generateImage(dream);
+    if (success) {
       // Reload dreams to show the new image
       loadDreams();
-      
-    } catch (error) {
-      console.error('Error generating image:', error);
-      Alert.alert('Error', 'Failed to generate image. Please try again.');
-    } finally {
-      setGeneratingDreamId(null);
     }
-  };
+  }, [generateImage, loadDreams]);
 
   const toggleViewMode = () => {
     setViewMode(viewMode === 'list' ? 'calendar' : 'list');
@@ -249,7 +125,7 @@ export default function DiaryScreen() {
             />
           )}
           refreshControl={
-            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+            <RefreshControl refreshing={isRefreshing} onRefresh={refreshDreams} />
           }
           contentContainerStyle={styles.listContent}
           showsVerticalScrollIndicator={false}
@@ -271,98 +147,33 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    padding: 16,
-    paddingBottom: 8,
+    padding: THEME_CONSTANTS.SPACING.LG,
+    paddingBottom: THEME_CONSTANTS.SPACING.SM,
   },
   viewToggle: {
-    padding: 8,
+    padding: THEME_CONSTANTS.SPACING.SM,
   },
   viewToggleText: {
     fontSize: 14,
-    opacity: 0.7,
+    opacity: THEME_CONSTANTS.OPACITY.SUBTITLE,
   },
   listContent: { 
-    padding: 16,
-    paddingTop: 8,
-  },
-  dreamItem: {
-    padding: 16,
-    borderRadius: 12,
-    marginBottom: 12,
-    borderWidth: 1,
-  },
-  dreamHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    marginBottom: 8,
-  },
-  dreamTitle: {
-    flex: 1,
-    marginRight: 8,
-  },
-  dreamDate: {
-    fontSize: 12,
-    opacity: 0.6,
-  },
-  dreamContent: {
-    lineHeight: 20,
-    marginBottom: 12,
-  },
-  tagsContainer: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 6,
-    marginBottom: 12,
-  },
-  tag: {
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 12,
-  },
-  tagText: {
-    fontSize: 12,
-    fontWeight: '500',
-  },
-  buttonContainer: {
-    flexDirection: 'row',
-    gap: 8,
-    justifyContent: 'space-between',
-  },
-  generateButton: {
-    flex: 1,
-    paddingHorizontal: 16,
-  },
-  shareButton: {
-    flex: 1,
-    paddingHorizontal: 16,
-  },
-  imagesContainer: {
-    marginBottom: 12,
-    gap: 4,
-  },
-  imagePreview: {
-    padding: 8,
-    backgroundColor: 'rgba(0, 0, 0, 0.05)',
-    borderRadius: 8,
-  },
-  imageUrl: {
-    fontSize: 12,
-    opacity: 0.7,
+    padding: THEME_CONSTANTS.SPACING.LG,
+    paddingTop: THEME_CONSTANTS.SPACING.SM,
   },
   emptyState: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    padding: 32,
+    padding: THEME_CONSTANTS.SPACING.XXXL,
   },
   emptyTitle: {
-    marginBottom: 8,
+    marginBottom: THEME_CONSTANTS.SPACING.SM,
     textAlign: 'center',
   },
   emptyDescription: {
     textAlign: 'center',
-    opacity: 0.7,
+    opacity: THEME_CONSTANTS.OPACITY.SUBTITLE,
   },
   loadingContainer: {
     flex: 1,
@@ -373,6 +184,6 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    padding: 32,
+    padding: THEME_CONSTANTS.SPACING.XXXL,
   },
 });

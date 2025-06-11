@@ -1,28 +1,57 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Dream, DreamInput } from '@/types/Dream';
 import { AIImageResult } from './AIImageGenerator';
-
-const DREAMS_KEY = 'dreams';
+import { STORAGE_KEYS } from '@/constants/StorageKeys';
+import { logError, AppError } from '@/utils/errorHandler';
 
 export class DreamStorage {
-  static async getAllDreams(): Promise<Dream[]> {
+  private static validateDream(dream: any): dream is Dream {
+    return (
+      typeof dream.id === 'string' &&
+      typeof dream.title === 'string' &&
+      typeof dream.content === 'string' &&
+      Array.isArray(dream.tags) &&
+      dream.createdAt &&
+      dream.updatedAt
+    );
+  }
+
+  private static sanitizeDream(dream: any): Dream | null {
     try {
-      const data = await AsyncStorage.getItem(DREAMS_KEY);
-      if (!data) return [];
-      
-      const dreams = JSON.parse(data) as Dream[];
-      return dreams.map(dream => ({
+      if (!this.validateDream(dream)) {
+        logError('DreamStorage', `Invalid dream data: ${JSON.stringify(dream)}`);
+        return null;
+      }
+
+      return {
         ...dream,
         createdAt: new Date(dream.createdAt),
         updatedAt: new Date(dream.updatedAt),
-        generatedImages: dream.generatedImages?.map(img => ({
+        generatedImages: dream.generatedImages?.map((img: any) => ({
           ...img,
           generatedAt: new Date(img.generatedAt),
         })) || [],
-      }));
+      };
     } catch (error) {
-      console.error('Error loading dreams:', error);
-      return [];
+      logError('DreamStorage', `Error sanitizing dream: ${error}`);
+      return null;
+    }
+  }
+
+  static async getAllDreams(): Promise<Dream[]> {
+    try {
+      const data = await AsyncStorage.getItem(STORAGE_KEYS.DREAMS);
+      if (!data) return [];
+      
+      const rawDreams = JSON.parse(data) as any[];
+      const validDreams = rawDreams
+        .map(dream => this.sanitizeDream(dream))
+        .filter((dream): dream is Dream => dream !== null);
+
+      return validDreams;
+    } catch (error) {
+      logError('DreamStorage', error);
+      throw new AppError('Failed to load dreams', 'LOAD_ERROR', 'DreamStorage.getAllDreams');
     }
   }
 
@@ -41,12 +70,12 @@ export class DreamStorage {
       };
 
       dreams.unshift(newDream);
-      await AsyncStorage.setItem(DREAMS_KEY, JSON.stringify(dreams));
+      await AsyncStorage.setItem(STORAGE_KEYS.DREAMS, JSON.stringify(dreams));
       
       return newDream;
     } catch (error) {
-      console.error('Error saving dream:', error);
-      throw error;
+      logError('DreamStorage', error);
+      throw new AppError('Failed to save dream', 'SAVE_ERROR', 'DreamStorage.saveDream');
     }
   }
 
@@ -55,7 +84,10 @@ export class DreamStorage {
       const dreams = await this.getAllDreams();
       const index = dreams.findIndex(dream => dream.id === id);
       
-      if (index === -1) return null;
+      if (index === -1) {
+        logError('DreamStorage', `Dream with id ${id} not found`);
+        return null;
+      }
 
       dreams[index] = {
         ...dreams[index],
@@ -63,24 +95,30 @@ export class DreamStorage {
         updatedAt: new Date(),
       };
 
-      await AsyncStorage.setItem(DREAMS_KEY, JSON.stringify(dreams));
+      await AsyncStorage.setItem(STORAGE_KEYS.DREAMS, JSON.stringify(dreams));
       return dreams[index];
     } catch (error) {
-      console.error('Error updating dream:', error);
-      throw error;
+      logError('DreamStorage', error);
+      throw new AppError('Failed to update dream', 'UPDATE_ERROR', 'DreamStorage.updateDream');
     }
   }
 
   static async deleteDream(id: string): Promise<boolean> {
     try {
       const dreams = await this.getAllDreams();
+      const originalLength = dreams.length;
       const filteredDreams = dreams.filter(dream => dream.id !== id);
       
-      await AsyncStorage.setItem(DREAMS_KEY, JSON.stringify(filteredDreams));
+      if (filteredDreams.length === originalLength) {
+        logError('DreamStorage', `Dream with id ${id} not found for deletion`);
+        return false;
+      }
+      
+      await AsyncStorage.setItem(STORAGE_KEYS.DREAMS, JSON.stringify(filteredDreams));
       return true;
     } catch (error) {
-      console.error('Error deleting dream:', error);
-      return false;
+      logError('DreamStorage', error);
+      throw new AppError('Failed to delete dream', 'DELETE_ERROR', 'DreamStorage.deleteDream');
     }
   }
 
@@ -89,8 +127,8 @@ export class DreamStorage {
       const dreams = await this.getAllDreams();
       return dreams.find(dream => dream.id === id) || null;
     } catch (error) {
-      console.error('Error getting dream by id:', error);
-      return null;
+      logError('DreamStorage', error);
+      throw new AppError('Failed to get dream by id', 'GET_ERROR', 'DreamStorage.getDreamById');
     }
   }
 
@@ -99,23 +137,20 @@ export class DreamStorage {
       const dreams = await this.getAllDreams();
       const dreamIndex = dreams.findIndex(dream => dream.id === dreamId);
       
-      if (dreamIndex === -1) return null;
-
-      // Serialize the image result to handle Date objects
-      const serializedImageResult = {
-        ...imageResult,
-        generatedAt: imageResult.generatedAt.toISOString(),
-      };
+      if (dreamIndex === -1) {
+        logError('DreamStorage', `Dream with id ${dreamId} not found for image addition`);
+        return null;
+      }
 
       dreams[dreamIndex].generatedImages.push(imageResult);
       dreams[dreamIndex].hasGeneratedImage = true;
       dreams[dreamIndex].updatedAt = new Date();
 
-      await AsyncStorage.setItem(DREAMS_KEY, JSON.stringify(dreams));
+      await AsyncStorage.setItem(STORAGE_KEYS.DREAMS, JSON.stringify(dreams));
       return dreams[dreamIndex];
     } catch (error) {
-      console.error('Error adding image to dream:', error);
-      throw error;
+      logError('DreamStorage', error);
+      throw new AppError('Failed to add image to dream', 'ADD_IMAGE_ERROR', 'DreamStorage.addImageToDream');
     }
   }
 }

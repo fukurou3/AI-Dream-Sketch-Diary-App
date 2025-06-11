@@ -3,24 +3,32 @@ import { StyleSheet, TextInput, Alert, View, ScrollView } from 'react-native';
 import { ThemedView } from '@/components/ThemedView';
 import { ThemedText } from '@/components/ThemedText';
 import { GradientButton } from '@/components/GradientButton';
+import { VoiceInputButton } from '@/components/VoiceInputButton';
 import { useLocalization } from '@/contexts/LocalizationContext';
-import { useColorScheme } from '@/hooks/useColorScheme';
-import { Colors } from '@/constants/Colors';
-import { DreamStorage } from '@/services/DreamStorage';
+import { useThemedInputStyle, useThemedPlaceholderColor } from '@/hooks/useThemedStyles';
+import { useRecordForm } from '@/hooks/useRecordForm';
+import { useDreams } from '@/hooks/useDreams';
+import { useErrorHandler } from '@/hooks/useErrorHandler';
+import { THEME_CONSTANTS } from '@/constants/Theme';
 
 export default function RecordScreen() {
   const { t } = useLocalization();
-  const colorScheme = useColorScheme() ?? 'light';
-  const [title, setTitle] = useState('');
-  const [content, setContent] = useState('');
-  const [tags, setTags] = useState('');
   const [isListening, setIsListening] = useState(false);
-  const [isSaving, setIsSaving] = useState(false);
-
-  const extractTags = (tagString: string): string[] => {
-    const matches = tagString.match(/#\w+/g);
-    return matches ? matches.map(tag => tag.substring(1)) : [];
-  };
+  
+  const inputStyle = useThemedInputStyle();
+  const placeholderColor = useThemedPlaceholderColor();
+  const { handleSavingError } = useErrorHandler();
+  const { saveDream } = useDreams();
+  
+  const {
+    formData,
+    validation,
+    isSubmitting,
+    updateField,
+    resetForm,
+    validateForm,
+    toDreamInput,
+  } = useRecordForm();
 
   const onVoiceInput = async () => {
     setIsListening(true);
@@ -29,7 +37,8 @@ export default function RecordScreen() {
       // For speech-to-text, we would need expo-speech-recognition or similar
       // For now, we'll simulate voice input
       setTimeout(() => {
-        setContent(content + (content ? ' ' : '') + '[Voice input would go here]');
+        const newContent = formData.content + (formData.content ? ' ' : '') + '[Voice input would go here]';
+        updateField('content', newContent);
         setIsListening(false);
       }, 2000);
     } catch (error) {
@@ -39,37 +48,26 @@ export default function RecordScreen() {
   };
 
   const onSave = async () => {
-    if (!title.trim() && !content.trim()) {
-      Alert.alert('Error', 'Please enter a title or content for your dream.');
+    if (!validateForm()) {
       return;
     }
 
-    setIsSaving(true);
     try {
-      const dreamTags = extractTags(tags);
-      await DreamStorage.saveDream({
-        title: title.trim() || 'Untitled Dream',
-        content: content.trim(),
-        tags: dreamTags,
-      });
+      const dreamInput = toDreamInput();
+      const savedDream = await saveDream(dreamInput);
       
-      Alert.alert('Success', t('dreamSaved'));
-      setTitle('');
-      setContent('');
-      setTags('');
+      if (savedDream) {
+        Alert.alert('Success', t('dreamSaved'));
+        resetForm();
+      }
     } catch (error) {
-      console.error('Error saving dream:', error);
-      Alert.alert('Error', 'Failed to save dream. Please try again.');
-    } finally {
-      setIsSaving(false);
+      handleSavingError(error);
     }
   };
 
-  const inputStyle = {
+  const combinedInputStyle = {
     ...styles.input,
-    backgroundColor: colorScheme === 'dark' ? '#2C2F49' : '#FFFFFF',
-    color: Colors[colorScheme].text,
-    borderColor: colorScheme === 'dark' ? '#404566' : '#E0E0E0',
+    ...inputStyle,
   };
 
   return (
@@ -84,12 +82,17 @@ export default function RecordScreen() {
             {t('title')}
           </ThemedText>
           <TextInput
-            style={inputStyle}
-            value={title}
-            onChangeText={setTitle}
+            style={combinedInputStyle}
+            value={formData.title}
+            onChangeText={(value) => updateField('title', value)}
             placeholder={t('titlePlaceholder')}
-            placeholderTextColor={colorScheme === 'dark' ? '#9BA1A6' : '#687076'}
+            placeholderTextColor={placeholderColor}
           />
+          {validation.errors.title && (
+            <ThemedText style={styles.errorText}>
+              {validation.errors.title}
+            </ThemedText>
+          )}
         </View>
 
         <View style={styles.section}>
@@ -97,18 +100,22 @@ export default function RecordScreen() {
             {t('content')}
           </ThemedText>
           <TextInput
-            style={[inputStyle, styles.contentInput]}
-            value={content}
-            onChangeText={setContent}
+            style={[combinedInputStyle, styles.contentInput]}
+            value={formData.content}
+            onChangeText={(value) => updateField('content', value)}
             placeholder={t('dreamPlaceholder')}
-            placeholderTextColor={colorScheme === 'dark' ? '#9BA1A6' : '#687076'}
+            placeholderTextColor={placeholderColor}
             multiline
             textAlignVertical="top"
           />
-          <GradientButton
-            title={isListening ? t('listening') : t('voiceInput')}
-            onPress={onVoiceInput}
-            disabled={isListening}
+          {validation.errors.content && (
+            <ThemedText style={styles.errorText}>
+              {validation.errors.content}
+            </ThemedText>
+          )}
+          <VoiceInputButton
+            onVoiceInput={onVoiceInput}
+            isListening={isListening}
             style={styles.voiceButton}
           />
         </View>
@@ -118,18 +125,23 @@ export default function RecordScreen() {
             {t('tags')}
           </ThemedText>
           <TextInput
-            style={inputStyle}
-            value={tags}
-            onChangeText={setTags}
+            style={combinedInputStyle}
+            value={formData.tags}
+            onChangeText={(value) => updateField('tags', value)}
             placeholder={t('tagsPlaceholder')}
-            placeholderTextColor={colorScheme === 'dark' ? '#9BA1A6' : '#687076'}
+            placeholderTextColor={placeholderColor}
           />
+          {validation.errors.tags && (
+            <ThemedText style={styles.errorText}>
+              {validation.errors.tags}
+            </ThemedText>
+          )}
         </View>
 
         <GradientButton
-          title={isSaving ? 'Saving...' : t('save')}
+          title={isSubmitting ? 'Saving...' : t('save')}
           onPress={onSave}
-          disabled={isSaving}
+          disabled={isSubmitting}
           style={styles.saveButton}
         />
       </ScrollView>
@@ -142,22 +154,22 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   scrollContent: {
-    padding: 16,
-    gap: 20,
+    padding: THEME_CONSTANTS.SPACING.LG,
+    gap: THEME_CONSTANTS.SPACING.XL,
   },
   headerTitle: {
     textAlign: 'center',
-    marginBottom: 8,
+    marginBottom: THEME_CONSTANTS.SPACING.SM,
   },
   section: {
-    gap: 8,
+    gap: THEME_CONSTANTS.SPACING.SM,
   },
   label: {
-    marginBottom: 4,
+    marginBottom: THEME_CONSTANTS.SPACING.XS,
   },
   input: {
-    padding: 16,
-    borderRadius: 12,
+    padding: THEME_CONSTANTS.SPACING.LG,
+    borderRadius: THEME_CONSTANTS.BORDER_RADIUS.MEDIUM,
     borderWidth: 1,
     fontSize: 16,
   },
@@ -167,11 +179,16 @@ const styles = StyleSheet.create({
   },
   voiceButton: {
     alignSelf: 'center',
-    marginTop: 8,
-    paddingHorizontal: 24,
+    marginTop: THEME_CONSTANTS.SPACING.SM,
+    paddingHorizontal: THEME_CONSTANTS.SPACING.XXL,
   },
   saveButton: {
-    marginTop: 16,
+    marginTop: THEME_CONSTANTS.SPACING.LG,
     alignSelf: 'stretch',
+  },
+  errorText: {
+    fontSize: 12,
+    color: '#FF6B6B',
+    marginTop: THEME_CONSTANTS.SPACING.XS,
   },
 });
