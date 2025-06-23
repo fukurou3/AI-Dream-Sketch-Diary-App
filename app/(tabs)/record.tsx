@@ -1,18 +1,25 @@
 import React, { useState } from 'react';
-import { StyleSheet, TextInput, Alert, View, ScrollView } from 'react-native';
+import { StyleSheet, TextInput, Alert, View, ScrollView, StatusBar } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
 import { ThemedView } from '@/components/ThemedView';
 import { ThemedText } from '@/components/ThemedText';
 import { GradientButton } from '@/components/GradientButton';
 import { VoiceInputButton } from '@/components/VoiceInputButton';
+import { ModernCard } from '@/components/design/ModernCard';
+import { Typography } from '@/components/design/Typography';
+import { ModernButton } from '@/components/design/ModernButton';
 import { useLocalization } from '@/contexts/LocalizationContext';
 import { useThemedInputStyle, useThemedPlaceholderColor } from '@/hooks/useThemedStyles';
 import { useRecordForm } from '@/hooks/useRecordForm';
 import { useDreams } from '@/hooks/useDreams';
 import { useErrorHandler } from '@/hooks/useErrorHandler';
-import { THEME_CONSTANTS } from '@/constants/Theme';
+import { DESIGN_SYSTEM, getThemeColors } from '@/constants/DesignSystem';
+import { useColorScheme } from '@/hooks/useColorScheme';
 
 export default function RecordScreen() {
   const { t } = useLocalization();
+  const colorScheme = useColorScheme();
+  const themeColors = getThemeColors(colorScheme === 'dark');
   const [isListening, setIsListening] = useState(false);
   
   const inputStyle = useThemedInputStyle();
@@ -71,81 +78,106 @@ export default function RecordScreen() {
   };
 
   return (
-    <ThemedView style={styles.container}>
+    <LinearGradient
+      colors={DESIGN_SYSTEM.COLORS.GRADIENT.DREAM}
+      style={styles.container}
+    >
+      <StatusBar barStyle="light-content" />
       <ScrollView contentContainerStyle={styles.scrollContent}>
-        <ThemedText type="title" style={styles.headerTitle}>
-          {t('recordDream')}
-        </ThemedText>
-
-        <View style={styles.section}>
-          <ThemedText type="subtitle" style={styles.label}>
-            {t('title')}
-          </ThemedText>
-          <TextInput
-            style={combinedInputStyle}
-            value={formData.title}
-            onChangeText={(value) => updateField('title', value)}
-            placeholder={t('titlePlaceholder')}
-            placeholderTextColor={placeholderColor}
-          />
-          {validation.errors.title && (
-            <ThemedText style={styles.errorText}>
-              {validation.errors.title}
-            </ThemedText>
-          )}
+        <View style={styles.header}>
+          <Typography variant="h2" color="primary" weight="BOLD" align="center">
+            ✨ {t('recordDream')}
+          </Typography>
+          <Typography variant="body1" color="secondary" align="center" style={styles.subtitle}>
+            あなたの夢を記録しましょう
+          </Typography>
         </View>
 
-        <View style={styles.section}>
-          <ThemedText type="subtitle" style={styles.label}>
-            {t('content')}
-          </ThemedText>
-          <TextInput
-            style={[combinedInputStyle, styles.contentInput]}
-            value={formData.content}
-            onChangeText={(value) => updateField('content', value)}
-            placeholder={t('dreamPlaceholder')}
-            placeholderTextColor={placeholderColor}
-            multiline
-            textAlignVertical="top"
-          />
-          {validation.errors.content && (
-            <ThemedText style={styles.errorText}>
-              {validation.errors.content}
-            </ThemedText>
-          )}
-          <VoiceInputButton
-            onVoiceInput={onVoiceInput}
-            isListening={isListening}
-            style={styles.voiceButton}
-          />
-        </View>
+        <ModernCard variant="glass" style={styles.formCard}>
+          <View style={styles.section}>
+            <Typography variant="h6" weight="MEDIUM" style={styles.label}>
+              {t('title')}
+            </Typography>
+            <TextInput
+              style={[styles.input, { 
+                backgroundColor: themeColors.SURFACE,
+                borderColor: themeColors.BORDER,
+                color: themeColors.TEXT_PRIMARY
+              }]}
+              value={formData.title}
+              onChangeText={(value) => updateField('title', value)}
+              placeholder={t('titlePlaceholder')}
+              placeholderTextColor={themeColors.TEXT_SECONDARY}
+            />
+            {validation.errors.title && (
+              <Typography variant="caption" color="error" style={styles.errorText}>
+                {validation.errors.title}
+              </Typography>
+            )}
+          </View>
 
-        <View style={styles.section}>
-          <ThemedText type="subtitle" style={styles.label}>
-            {t('tags')}
-          </ThemedText>
-          <TextInput
-            style={combinedInputStyle}
-            value={formData.tags}
-            onChangeText={(value) => updateField('tags', value)}
-            placeholder={t('tagsPlaceholder')}
-            placeholderTextColor={placeholderColor}
-          />
-          {validation.errors.tags && (
-            <ThemedText style={styles.errorText}>
-              {validation.errors.tags}
-            </ThemedText>
-          )}
-        </View>
+          <View style={styles.section}>
+            <Typography variant="h6" weight="MEDIUM" style={styles.label}>
+              {t('content')}
+            </Typography>
+            <TextInput
+              style={[styles.input, styles.contentInput, { 
+                backgroundColor: themeColors.SURFACE,
+                borderColor: themeColors.BORDER,
+                color: themeColors.TEXT_PRIMARY
+              }]}
+              value={formData.content}
+              onChangeText={(value) => updateField('content', value)}
+              placeholder={t('dreamPlaceholder')}
+              placeholderTextColor={themeColors.TEXT_SECONDARY}
+              multiline
+              textAlignVertical="top"
+            />
+            {validation.errors.content && (
+              <Typography variant="caption" color="error" style={styles.errorText}>
+                {validation.errors.content}
+              </Typography>
+            )}
+            <VoiceInputButton
+              onVoiceInput={onVoiceInput}
+              isListening={isListening}
+              style={styles.voiceButton}
+            />
+          </View>
 
-        <GradientButton
-          title={isSubmitting ? 'Saving...' : t('save')}
-          onPress={onSave}
-          disabled={isSubmitting}
-          style={styles.saveButton}
-        />
+          <View style={styles.section}>
+            <Typography variant="h6" weight="MEDIUM" style={styles.label}>
+              {t('tags')}
+            </Typography>
+            <TextInput
+              style={[styles.input, { 
+                backgroundColor: themeColors.SURFACE,
+                borderColor: themeColors.BORDER,
+                color: themeColors.TEXT_PRIMARY
+              }]}
+              value={formData.tags}
+              onChangeText={(value) => updateField('tags', value)}
+              placeholder={t('tagsPlaceholder')}
+              placeholderTextColor={themeColors.TEXT_SECONDARY}
+            />
+            {validation.errors.tags && (
+              <Typography variant="caption" color="error" style={styles.errorText}>
+                {validation.errors.tags}
+              </Typography>
+            )}
+          </View>
+
+          <ModernButton
+            title={isSubmitting ? '💾 Saving...' : `💾 ${t('save')}`}
+            onPress={onSave}
+            disabled={isSubmitting}
+            variant="gradient"
+            size="LG"
+            style={styles.saveButton}
+          />
+        </ModernCard>
       </ScrollView>
-    </ThemedView>
+    </LinearGradient>
   );
 }
 
@@ -154,24 +186,32 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   scrollContent: {
-    padding: THEME_CONSTANTS.SPACING.LG,
-    gap: THEME_CONSTANTS.SPACING.XL,
+    padding: DESIGN_SYSTEM.SPACING.LG,
   },
-  headerTitle: {
-    textAlign: 'center',
-    marginBottom: THEME_CONSTANTS.SPACING.SM,
+  header: {
+    alignItems: 'center',
+    marginBottom: DESIGN_SYSTEM.SPACING.XL,
+    paddingTop: DESIGN_SYSTEM.SPACING.XL,
+  },
+  subtitle: {
+    marginTop: DESIGN_SYSTEM.SPACING.SM,
+  },
+  formCard: {
+    marginBottom: DESIGN_SYSTEM.SPACING.XL,
   },
   section: {
-    gap: THEME_CONSTANTS.SPACING.SM,
+    gap: DESIGN_SYSTEM.SPACING.SM,
+    marginBottom: DESIGN_SYSTEM.SPACING.LG,
   },
   label: {
-    marginBottom: THEME_CONSTANTS.SPACING.XS,
+    marginBottom: DESIGN_SYSTEM.SPACING.XS,
   },
   input: {
-    padding: THEME_CONSTANTS.SPACING.LG,
-    borderRadius: THEME_CONSTANTS.BORDER_RADIUS.MEDIUM,
-    borderWidth: 1,
-    fontSize: 16,
+    padding: DESIGN_SYSTEM.SPACING.LG,
+    borderRadius: DESIGN_SYSTEM.RADIUS.MD,
+    borderWidth: 1.5,
+    fontSize: DESIGN_SYSTEM.TYPOGRAPHY.SIZES.MD,
+    fontWeight: DESIGN_SYSTEM.TYPOGRAPHY.WEIGHTS.REGULAR,
   },
   contentInput: {
     height: 120,
@@ -179,16 +219,12 @@ const styles = StyleSheet.create({
   },
   voiceButton: {
     alignSelf: 'center',
-    marginTop: THEME_CONSTANTS.SPACING.SM,
-    paddingHorizontal: THEME_CONSTANTS.SPACING.XXL,
+    marginTop: DESIGN_SYSTEM.SPACING.SM,
   },
   saveButton: {
-    marginTop: THEME_CONSTANTS.SPACING.LG,
-    alignSelf: 'stretch',
+    marginTop: DESIGN_SYSTEM.SPACING.LG,
   },
   errorText: {
-    fontSize: 12,
-    color: '#FF6B6B',
-    marginTop: THEME_CONSTANTS.SPACING.XS,
+    marginTop: DESIGN_SYSTEM.SPACING.XS,
   },
 });

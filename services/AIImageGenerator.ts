@@ -1,4 +1,6 @@
 import { Dream } from '@/types/Dream';
+import { TicketService } from '@/services/TicketService';
+import { SubscriptionService } from '@/services/SubscriptionService';
 
 export interface AIImageGenerationOptions {
   style: 'realistic' | 'anime' | 'painting' | 'sketch';
@@ -28,14 +30,28 @@ export class AIImageGenerator {
     dream: Dream,
     options: Partial<AIImageGenerationOptions> = {}
   ): Promise<AIImageResult> {
+    // Automatically determine version based on subscription
+    const isPro = await SubscriptionService.hasProFeatures();
+    const actualVersion = isPro ? 'pro' : 'free';
+    
     const {
       style = 'realistic',
-      quality = 'standard',
-      version = 'free'
+      quality = isPro ? 'hd' : 'standard',
+      version = actualVersion
     } = options;
 
-    // Simulate API delay
-    await new Promise(resolve => setTimeout(resolve, 2000 + Math.random() * 3000));
+    // For free version, check and consume ticket
+    if (version === 'free') {
+      const ticketUsed = await TicketService.useTicket();
+      if (!ticketUsed) {
+        throw new Error('No tickets available. Please watch an ad or purchase tickets.');
+      }
+    }
+
+    // Simulate different API delays for different versions
+    const baseDelay = version === 'pro' ? 3000 : 2000; // Pro takes longer due to higher quality
+    const randomDelay = Math.random() * (version === 'pro' ? 5000 : 3000);
+    await new Promise(resolve => setTimeout(resolve, baseDelay + randomDelay));
 
     // Create a more elaborate prompt based on the dream content
     const enhancedPrompt = this.enhancePrompt(dream, style, version);
@@ -56,7 +72,7 @@ export class AIImageGenerator {
     let prompt = dream.content;
 
     if (version === 'free') {
-      // Free version: Add dramatic and creative elements
+      // Free version: Add dramatic and creative elements for entertainment
       const dramaticElements = [
         'in a surreal dreamscape',
         'with mystical lighting',
@@ -66,10 +82,18 @@ export class AIImageGenerator {
         'with dramatic shadows and light',
         'in a fantasy world',
         'with enchanted details',
+        'with vibrant colors and dynamic composition',
+        'in an artistic interpretation',
       ];
       
       const randomElement = dramaticElements[Math.floor(Math.random() * dramaticElements.length)];
       prompt += ` ${randomElement}`;
+    } else {
+      // Pro version: Focus on accuracy and detail for faithful reproduction
+      prompt += ', highly detailed, photorealistic, accurate representation';
+      
+      // Add quality modifiers for Pro version
+      prompt += ', professional photography quality, sharp focus, perfect lighting';
     }
 
     // Add style-specific modifiers
@@ -96,36 +120,41 @@ export class AIImageGenerator {
     return prompt;
   }
 
-  // Check if user has available generation credits
+  // Check if user has available generation credits (tickets)
   static async checkGenerationCredits(): Promise<number> {
-    // For development, return a mock number
-    // In production, this would check the user's subscription status or ad credits
-    return Math.floor(Math.random() * 5) + 1;
+    const ticketStatus = await TicketService.getUserTicketStatus();
+    return ticketStatus.availableTickets;
   }
 
-  // Consume one generation credit
+  // Consume one generation credit (ticket)
   static async consumeCredit(): Promise<boolean> {
-    // For development, always succeed
-    // In production, this would decrement the user's credits
-    return true;
+    return await TicketService.useTicket();
   }
 
-  // Watch an ad to earn credits (free tier)
+  // Watch an ad to earn credits (free tier) - deprecated, use TicketService.awardTicketForAd instead
   static async watchAdForCredit(): Promise<boolean> {
-    // Simulate watching an ad
-    await new Promise(resolve => setTimeout(resolve, 1000));
-    
-    // For development, always succeed
-    // In production, this would show a real ad and verify completion
-    return true;
+    // Redirect to TicketService for consistency
+    return await TicketService.awardTicketForAd();
   }
 
-  // Get available styles
-  static getAvailableStyles(version: 'free' | 'pro' = 'free'): string[] {
+  // Get available styles based on subscription
+  static async getAvailableStyles(): Promise<string[]> {
+    const isPro = await SubscriptionService.hasProFeatures();
+    const baseStyles = ['realistic', 'anime'];
+    
+    if (isPro) {
+      return [...baseStyles, 'painting', 'sketch', 'watercolor', 'digital_art', 'oil_painting', 'watercolor_portrait'];
+    }
+    
+    return baseStyles;
+  }
+
+  // Get available styles (sync version for backward compatibility)
+  static getAvailableStylesSync(version: 'free' | 'pro' = 'free'): string[] {
     const baseStyles = ['realistic', 'anime'];
     
     if (version === 'pro') {
-      return [...baseStyles, 'painting', 'sketch', 'watercolor', 'digital_art'];
+      return [...baseStyles, 'painting', 'sketch', 'watercolor', 'digital_art', 'oil_painting', 'watercolor_portrait'];
     }
     
     return baseStyles;

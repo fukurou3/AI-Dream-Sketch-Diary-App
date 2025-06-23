@@ -5,6 +5,8 @@ import { AIImageGenerator, AIImageGenerationOptions } from '@/services/AIImageGe
 import { DreamStorage } from '@/services/DreamStorage';
 import { useErrorHandler } from './useErrorHandler';
 import { useLocalization } from '@/contexts/LocalizationContext';
+import { TicketService } from '@/services/TicketService';
+import { SubscriptionService } from '@/services/SubscriptionService';
 
 export interface UseImageGenerationReturn {
   generatingDreamId: string | null;
@@ -40,31 +42,32 @@ export const useImageGeneration = (): UseImageGenerationReturn => {
     setGeneratingDreamId(dream.id);
     
     try {
-      // Check if user has credits (for free tier, this would check ad credits)
-      const hasCredits = await AIImageGenerator.checkGenerationCredits();
+      // Check subscription status
+      const isPro = await SubscriptionService.hasProFeatures();
       
-      if (hasCredits === 0) {
-        // For free tier, show ad first
-        const watchedAd = await AIImageGenerator.watchAdForCredit();
-        if (!watchedAd) {
-          Alert.alert('Error', 'Please watch the ad to generate an image.');
+      // For free users, check if they have tickets
+      if (!isPro) {
+        const ticketStatus = await TicketService.getUserTicketStatus();
+        
+        if (ticketStatus.availableTickets === 0) {
+          Alert.alert(
+            t('notEnoughTickets'),
+            t('needTicketMessage'),
+            [{ text: t('ok'), onPress: () => {} }]
+          );
           return false;
         }
       }
 
-      // Generate the image
+      // Generate the image (Pro users don't need tickets, free users will consume a ticket automatically)
       const imageResult = await AIImageGenerator.generateImage(dream, {
         style: 'realistic',
-        quality: 'standard',
-        version: 'free',
-        ...options,
+        quality: isPro ? 'hd' : 'standard',
+        ...options, // User can override defaults
       });
 
       // Save the image to the dream
       await DreamStorage.addImageToDream(dream.id, imageResult);
-      
-      // Consume the credit
-      await AIImageGenerator.consumeCredit();
       
       Alert.alert('Success', t('imageGenerated'));
       
@@ -72,7 +75,17 @@ export const useImageGeneration = (): UseImageGenerationReturn => {
       
     } catch (error) {
       console.error('Error generating image:', error);
-      handleImageError(error);
+      
+      // Check if error is related to tickets
+      if (error instanceof Error && error.message.includes('tickets')) {
+        Alert.alert(
+          t('notEnoughTickets'),
+          t('needTicketMessage'),
+          [{ text: t('ok'), onPress: () => {} }]
+        );
+      } else {
+        handleImageError(error);
+      }
       return false;
     } finally {
       setGeneratingDreamId(null);

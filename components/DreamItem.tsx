@@ -3,10 +3,13 @@ import { View, StyleSheet } from 'react-native';
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedView } from '@/components/ThemedView';
 import { GradientButton } from '@/components/GradientButton';
+import { ModernCard } from '@/components/design/ModernCard';
+import { Typography } from '@/components/design/Typography';
+import { ModernButton } from '@/components/design/ModernButton';
 import { useLocalization } from '@/contexts/LocalizationContext';
 import { useThemedCardStyle } from '@/hooks/useThemedStyles';
 import { Colors } from '@/constants/Colors';
-import { THEME_CONSTANTS } from '@/constants/Theme';
+import { DESIGN_SYSTEM } from '@/constants/DesignSystem';
 import { Dream } from '@/types/Dream';
 import { formatDreamDate } from '@/utils/dateUtils';
 import { useColorScheme } from '@/hooks/useColorScheme';
@@ -35,32 +38,32 @@ export function DreamItem({
   };
 
   return (
-    <ThemedView style={itemStyle}>
+    <ModernCard variant="elevated" style={styles.dreamItem}>
       <View style={styles.dreamHeader}>
-        <ThemedText type="subtitle" style={styles.dreamTitle}>
+        <Typography variant="h5" weight="SEMIBOLD" style={styles.dreamTitle}>
           {dream.title}
-        </ThemedText>
-        <ThemedText style={styles.dreamDate}>
+        </Typography>
+        <Typography variant="caption" color="secondary" style={styles.dreamDate}>
           {formatDreamDate(dream.createdAt)}
-        </ThemedText>
+        </Typography>
       </View>
       
-      <ThemedText numberOfLines={3} style={styles.dreamContent}>
+      <Typography variant="body1" numberOfLines={3} style={styles.dreamContent}>
         {dream.content}
-      </ThemedText>
+      </Typography>
       
       {dream.tags.length > 0 && (
         <View style={styles.tagsContainer}>
           {dream.tags.map((tag, index) => (
-            <View 
+            <ModernCard 
               key={index} 
-              style={[
-                styles.tag, 
-                { backgroundColor: Colors[colorScheme].buttonStart }
-              ]}
+              variant="glass"
+              padding="XS"
+              radius="ROUND"
+              style={styles.tag}
             >
-              <ThemedText style={styles.tagText}>#{tag}</ThemedText>
-            </View>
+              <Typography variant="caption" color="accent">#{tag}</Typography>
+            </ModernCard>
           ))}
         </View>
       )}
@@ -68,95 +71,84 @@ export function DreamItem({
       {dream.generatedImages.length > 0 && (
         <View style={styles.imagesContainer}>
           {dream.generatedImages.slice(0, 3).map((image, index) => (
-            <View key={index} style={styles.imagePreview}>
-              <ThemedText style={styles.imageUrl} numberOfLines={1}>
+            <ModernCard key={index} variant="glass" padding="SM" style={styles.imagePreview}>
+              <Typography variant="caption" numberOfLines={1}>
                 🖼️ {image.style} image
-              </ThemedText>
-            </View>
+              </Typography>
+            </ModernCard>
           ))}
         </View>
       )}
       
       <View style={styles.buttonContainer}>
-        <GradientButton
-          title={isGenerating ? t('generating') : t('generateImage')}
+        <ModernButton
+          title={isGenerating ? t('generating') : `✨ ${t('generateImage')}`}
           onPress={() => onGenerateImage(dream)}
           disabled={isGenerating}
+          variant="gradient"
+          size="MD"
           style={styles.generateButton}
         />
-        <GradientButton
-          title={t('share')}
+        <ModernButton
+          title={`📤 ${t('share')}`}
           onPress={() => onShare(dream)}
+          variant="outline"
+          size="MD"
           style={styles.shareButton}
         />
       </View>
-    </ThemedView>
+    </ModernCard>
   );
 }
 
 const styles = StyleSheet.create({
   dreamItem: {
-    padding: THEME_CONSTANTS.SPACING.LG,
-    borderRadius: THEME_CONSTANTS.BORDER_RADIUS.MEDIUM,
-    marginBottom: THEME_CONSTANTS.SPACING.MD,
+    marginBottom: DESIGN_SYSTEM.SPACING.MD,
   },
   dreamHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
-    marginBottom: THEME_CONSTANTS.SPACING.SM,
+    marginBottom: DESIGN_SYSTEM.SPACING.SM,
   },
   dreamTitle: {
     flex: 1,
-    marginRight: THEME_CONSTANTS.SPACING.SM,
+    marginRight: DESIGN_SYSTEM.SPACING.SM,
   },
   dreamDate: {
-    fontSize: 12,
-    opacity: THEME_CONSTANTS.OPACITY.SECONDARY,
+    // Typography component handles styling
   },
   dreamContent: {
-    lineHeight: 20,
-    marginBottom: THEME_CONSTANTS.SPACING.MD,
+    marginBottom: DESIGN_SYSTEM.SPACING.MD,
   },
   tagsContainer: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: THEME_CONSTANTS.SPACING.XS,
-    marginBottom: THEME_CONSTANTS.SPACING.MD,
+    gap: DESIGN_SYSTEM.SPACING.XS,
+    marginBottom: DESIGN_SYSTEM.SPACING.MD,
   },
   tag: {
-    paddingHorizontal: THEME_CONSTANTS.SPACING.SM,
-    paddingVertical: THEME_CONSTANTS.SPACING.XS,
-    borderRadius: THEME_CONSTANTS.BORDER_RADIUS.MEDIUM,
-  },
-  tagText: {
-    fontSize: 12,
-    fontWeight: '500',
+    // ModernCard handles padding and styling
   },
   buttonContainer: {
     flexDirection: 'row',
-    gap: THEME_CONSTANTS.SPACING.SM,
+    gap: DESIGN_SYSTEM.SPACING.SM,
     justifyContent: 'space-between',
   },
   generateButton: {
     flex: 1,
-    paddingHorizontal: THEME_CONSTANTS.SPACING.LG,
   },
   shareButton: {
     flex: 1,
-    paddingHorizontal: THEME_CONSTANTS.SPACING.LG,
   },
   imagesContainer: {
-    marginBottom: THEME_CONSTANTS.SPACING.MD,
-    gap: THEME_CONSTANTS.SPACING.XS,
+    marginBottom: DESIGN_SYSTEM.SPACING.MD,
+    gap: DESIGN_SYSTEM.SPACING.XS,
   },
   imagePreview: {
-    padding: THEME_CONSTANTS.SPACING.SM,
-    backgroundColor: 'rgba(0, 0, 0, 0.05)',
-    borderRadius: THEME_CONSTANTS.BORDER_RADIUS.SMALL,
+    // ModernCard handles styling
   },
   imageUrl: {
-    fontSize: 12,
-    opacity: THEME_CONSTANTS.OPACITY.SUBTITLE,
+    // Typography component handles styling
   },
 });
