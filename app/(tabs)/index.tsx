@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import { FlatList, StyleSheet, View, RefreshControl, Alert, StatusBar } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { DreamItem } from '@/components/DreamItem';
@@ -7,11 +7,15 @@ import { ModernCard } from '@/components/design/ModernCard';
 import { Typography } from '@/components/design/Typography';
 import { InstagramGrid } from '@/components/design/InstagramGrid';
 import { AnimatedPressable } from '@/components/design/AnimatedPressable';
+import { ProUpsellModal } from '@/components/design/ProUpsellModal';
+import { DreamItemSkeleton } from '@/components/DreamItemSkeleton';
+import { InstagramGridSkeleton } from '@/components/design/InstagramGridSkeleton';
 import { useLocalization } from '@/contexts/LocalizationContext';
 import { useDreams } from '@/hooks/useDreams';
 import { useImageGeneration } from '@/hooks/useImageGeneration';
 import { useErrorHandler } from '@/hooks/useErrorHandler';
 import { SharingService } from '@/services/SharingService';
+import { SubscriptionService } from '@/services/SubscriptionService';
 import { DESIGN_SYSTEM, getThemeColors } from '@/constants/DesignSystem';
 import { Dream } from '@/types/Dream';
 import { useFocusEffect } from '@react-navigation/native';
@@ -46,7 +50,10 @@ export default function DiaryScreen() {
   const { t } = useLocalization();
   const colorScheme = useColorScheme();
   const [viewMode, setViewMode] = useState<ViewMode>('grid');
-  const { handleSharingError } = useErrorHandler();
+  const [isUpsellModalVisible, setIsUpsellModalVisible] = useState(false);
+  const [selectedDreamImage, setSelectedDreamImage] = useState<string | undefined>(undefined);
+  const [isProUser, setIsProUser] = useState(false);
+  const { handleSharingError, handleGenericError } = useErrorHandler();
   
   const { 
     dreams, 
@@ -61,30 +68,53 @@ export default function DiaryScreen() {
     generateImage 
   } = useImageGeneration();
 
+  const checkProStatus = useCallback(async () => {
+    const proStatus = await SubscriptionService.hasProFeatures();
+    setIsProUser(proStatus);
+  }, []);
+
   useFocusEffect(
     useCallback(() => {
       loadDreams();
-    }, [loadDreams])
+      checkProStatus();
+    }, [loadDreams, checkProStatus])
   );
+
+  const handleSubscribe = async (planId: string) => {
+    try {
+      const success = await SubscriptionService.subscribeToPlan(planId);
+      if (success) {
+        Alert.alert('Success', 'Proプランへようこそ！');
+        await checkProStatus(); // Re-check pro status
+      } else {
+        Alert.alert('Error', '購読処理に失敗しました。');
+      }
+    } catch (error) {
+      handleGenericError(error, '購読処理中にエラーが発生しました。');
+    }
+  };
+
+  const handleGridItemPress = (item: { id: string; imageUrl: string }) => {
+    if (isProUser) {
+      // Pro users can view details directly
+      const dream = dreams.find(d => d.id === item.id);
+      console.log('Pro user selected:', dream?.title);
+      // Implement navigation to dream detail screen here
+    } else {
+      // Free users see the upsell modal
+      setSelectedDreamImage(item.imageUrl);
+      setIsUpsellModalVisible(true);
+    }
+  };
 
   const onShare = useCallback(async (dream: Dream) => {
     try {
-      if (dream.generatedImages.length > 0) {
-        // Share the first generated image
-        const success = await SharingService.shareImage(dream, dream.generatedImages[0]);
-        if (success) {
-          Alert.alert('Success', t('sharedSuccessfully'));
-        } else {
-          Alert.alert('Error', t('sharingFailed'));
-        }
+      const service = dream.generatedImages.length > 0 ? SharingService.shareImage : SharingService.shareText;
+      const success = await service(dream, dream.generatedImages[0]);
+      if (success) {
+        Alert.alert('Success', t('sharedSuccessfully'));
       } else {
-        // Share as text
-        const success = await SharingService.shareText(dream);
-        if (success) {
-          Alert.alert('Success', t('sharedSuccessfully'));
-        } else {
-          Alert.alert('Error', t('sharingFailed'));
-        }
+        Alert.alert('Error', t('sharingFailed'));
       }
     } catch (error) {
       handleSharingError(error);
@@ -94,7 +124,6 @@ export default function DiaryScreen() {
   const onGenerateImage = useCallback(async (dream: Dream) => {
     const success = await generateImage(dream);
     if (success) {
-      // Reload dreams to show the new image
       loadDreams();
     }
   }, [generateImage, loadDreams]);
@@ -123,21 +152,71 @@ export default function DiaryScreen() {
     }
   };
 
-  if (isLoading) {
-    return (
-      <LinearGradient
-        colors={DESIGN_SYSTEM.COLORS.GRADIENT.NIGHT}
-        style={styles.container}
-      >
-        <StatusBar barStyle={colorScheme === 'dark' ? 'light-content' : 'dark-content'} />
-        <View style={styles.loadingContainer}>
-          <ModernCard variant="glass">
-            <Typography variant="body1" align="center">✨ Loading dreams...</Typography>
-          </ModernCard>
+  const renderContent = () => {
+    if (isLoading && !isRefreshing) {
+      return viewMode === 'grid' ? <InstagramGridSkeleton /> : (
+        <View style={styles.listContent}>
+          <DreamItemSkeleton />
+          <DreamItemSkeleton />
+          <DreamItemSkeleton />
         </View>
-      </LinearGradient>
+      );
+    }
+
+    if (dreams.length === 0) {
+      return <EmptyState />;
+    }
+
+    if (viewMode === 'grid') {
+      return (
+        <InstagramGrid
+          data={dreams.filter(dream => dream.generatedImages.length > 0).map(dream => ({
+            id: dream.id,
+            imageUrl: dream.generatedImages[0]?.url || '',
+          }))}
+          onItemPress={handleGridItemPress}
+        />
+      );
+    }
+    
+    if (viewMode === 'list') {
+      return (
+        <FlatList
+          data={dreams}
+          keyExtractor={(dream) => dream.id}
+          renderItem={({ item }) => (
+            <DreamItem 
+              dream={item} 
+              onGenerateImage={onGenerateImage}
+              onShare={onShare}
+              isGenerating={generatingDreamId === item.id}
+            />
+          )}
+          refreshControl={
+            <RefreshControl 
+              refreshing={isRefreshing} 
+              onRefresh={refreshDreams}
+              tintColor={DESIGN_SYSTEM.COLORS.PRIMARY}
+            />
+          }
+          contentContainerStyle={styles.listContent}
+          showsVerticalScrollIndicator={false}
+        />
+      );
+    }
+
+    return (
+      <ModernCard variant="glass" style={styles.calendarContainer}>
+        <Typography variant="h4" align="center">📅</Typography>
+        <Typography variant="body1" color="secondary" align="center">
+          Calendar view coming soon...
+        </Typography>
+        <Typography variant="caption" color="tertiary" align="center">
+          夢をカレンダー形式で表示する機能を開発中です
+        </Typography>
+      </ModernCard>
     );
-  }
+  };
 
   return (
     <LinearGradient
@@ -146,7 +225,6 @@ export default function DiaryScreen() {
     >
       <StatusBar barStyle="light-content" />
       
-      {/* Modern Header */}
       <View style={styles.header}>
         <View style={styles.headerContent}>
           <Typography variant="h2" color="primary" weight="BOLD">
@@ -169,57 +247,16 @@ export default function DiaryScreen() {
         </AnimatedPressable>
       </View>
 
-      <TicketDisplay onTicketUpdate={loadDreams} />
+      {!isProUser && <TicketDisplay onTicketUpdate={loadDreams} />}
 
-      {dreams.length === 0 ? (
-        <EmptyState />
-      ) : viewMode === 'grid' ? (
-        <InstagramGrid
-          data={dreams.filter(dream => dream.generatedImages.length > 0).map(dream => ({
-            id: dream.id,
-            imageUrl: dream.generatedImages[0]?.url || '',
-          }))}
-          onItemPress={(item) => {
-            const dream = dreams.find(d => d.id === item.id);
-            if (dream) {
-              // Handle dream item press
-              console.log('Dream selected:', dream.title);
-            }
-          }}
-        />
-      ) : viewMode === 'list' ? (
-        <FlatList
-          data={dreams}
-          keyExtractor={(dream) => dream.id}
-          renderItem={({ item }) => (
-            <DreamItem 
-              dream={item} 
-              onGenerateImage={onGenerateImage}
-              onShare={onShare}
-              isGenerating={generatingDreamId === item.id}
-            />
-          )}
-          refreshControl={
-            <RefreshControl 
-              refreshing={isRefreshing} 
-              onRefresh={refreshDreams}
-              tintColor={DESIGN_SYSTEM.COLORS.PRIMARY}
-            />
-          }
-          contentContainerStyle={styles.listContent}
-          showsVerticalScrollIndicator={false}
-        />
-      ) : (
-        <ModernCard variant="glass" style={styles.calendarContainer}>
-          <Typography variant="h4" align="center">📅</Typography>
-          <Typography variant="body1" color="secondary" align="center">
-            Calendar view coming soon...
-          </Typography>
-          <Typography variant="caption" color="tertiary" align="center">
-            夢をカレンダー形式で表示する機能を開発中です
-          </Typography>
-        </ModernCard>
-      )}
+      {renderContent()}
+
+      <ProUpsellModal
+        visible={isUpsellModalVisible}
+        onClose={() => setIsUpsellModalVisible(false)}
+        onSubscribe={handleSubscribe}
+        dreamImage={selectedDreamImage}
+      />
     </LinearGradient>
   );
 }

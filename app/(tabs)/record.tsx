@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { StyleSheet, TextInput, Alert, View, ScrollView, StatusBar } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
+import { useNavigation } from '@react-navigation/native';
 import { ThemedView } from '@/components/ThemedView';
 import { ThemedText } from '@/components/ThemedText';
 import { GradientButton } from '@/components/GradientButton';
@@ -13,6 +14,7 @@ import { useThemedInputStyle, useThemedPlaceholderColor } from '@/hooks/useTheme
 import { useRecordForm } from '@/hooks/useRecordForm';
 import { useDreams } from '@/hooks/useDreams';
 import { useErrorHandler } from '@/hooks/useErrorHandler';
+import { useImageGeneration } from '@/hooks/useImageGeneration';
 import { DESIGN_SYSTEM, getThemeColors } from '@/constants/DesignSystem';
 import { useColorScheme } from '@/hooks/useColorScheme';
 
@@ -21,11 +23,13 @@ export default function RecordScreen() {
   const colorScheme = useColorScheme();
   const themeColors = getThemeColors(colorScheme === 'dark');
   const [isListening, setIsListening] = useState(false);
+  const navigation = useNavigation();
   
   const inputStyle = useThemedInputStyle();
   const placeholderColor = useThemedPlaceholderColor();
   const { handleSavingError } = useErrorHandler();
   const { saveDream } = useDreams();
+  const { generateImage } = useImageGeneration();
   
   const {
     formData,
@@ -64,8 +68,23 @@ export default function RecordScreen() {
       const savedDream = await saveDream(dreamInput);
       
       if (savedDream) {
-        Alert.alert('Success', t('dreamSaved'));
-        resetForm();
+        // Immediately start image generation
+        generateImage(savedDream);
+
+        Alert.alert(
+          t('dreamSaved'),
+          'AIがあなたの夢のスケッチを始めました！🎨 完成をお楽しみに。',
+          [
+            {
+              text: '日記を見る',
+              onPress: () => {
+                resetForm();
+                navigation.navigate('index');
+              },
+            },
+          ],
+          { cancelable: false }
+        );
       }
     } catch (error) {
       handleSavingError(error);
